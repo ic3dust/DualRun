@@ -22,10 +22,10 @@ try{
         [Security.Principal.WindowsBuiltInRole]::Administrator
     )
 
-    Write-Output "[INFO] Running as admin: $isAdmin"
+    Write-Output "Running as admin: $isAdmin"
 
 
-    Write-Output "[INFO] Creating user $u..."
+    Write-Output "Creating user $u..."
 
     $exist = Get-LocalUser -Name $u -ErrorAction SilentlyContinue
     if($exist){

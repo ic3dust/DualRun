@@ -4,7 +4,8 @@ import java.awt.Color;
 import java.awt.Font;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-
+import java.io.FileReader;
+import java.io.IOException;
 
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
@@ -21,12 +22,13 @@ public class Window {
     private static int w = 980;
     private static int h = w/2+w/10-100;
     private static int bw = w/6+65;
-    private static int bh = bw/4;
+    private static int bh = bw/6;
     private static int bx = w-w/4-25;
     private static int by = h/6-50;
+    private static double space = 100.0;
 
     private static boolean userCreated = false;
-    private static String username;
+    private static String username = "DualRun";
     //And set those later on in appropriate condition blocks, because makes no sense to laden code with another during-process actual username check;
     //other errors will work in any case and display the full issue demonstrably
 
@@ -37,7 +39,28 @@ public class Window {
         "Discord"
     };
 
-    private static String app = "-Select an app-";
+    private static int runScript(String path, StringBuilder output) throws IOException,InterruptedException{
+        ProcessBuilder pb = new ProcessBuilder(
+            "powershell.exe",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            path
+        );
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        try(
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream()))){
+                    String line;
+                    while ((line = reader.readLine())!=null){
+                        output.append(line).append("\n");
+                    }
+                } 
+        return process.waitFor();
+    }
+
+    private static String selectedApp = null;
 
 
 
@@ -73,7 +96,7 @@ public static void Log(JTextPane con, String msg, Color color) {
             Log(con, "Step 1: Create user for storing second instance\n", Color.WHITE);
 
             JComboBox<String> selector = new JComboBox<String>(options);
-            selector.setBounds(bx, by+100, bw, bh);
+            selector.setBounds(bx, (int)(by+(space*0.75)), bw, bh);
             selector.setSelectedIndex(0);
             selector.setEnabled(false);
 
@@ -81,104 +104,90 @@ public static void Log(JTextPane con, String msg, Color color) {
             Usr.setText("1. Create user-container");
             Usr.setBounds(bx, by, bw, bh);
 
+            JButton delUsr = new JButton("Delete DualRun user");
+            delUsr.setBounds(bx, (int)(by+3*space), bw, bh);
+            delUsr.setEnabled(true);
+
             Usr.addActionListener(e -> {
                 Log(con, "Creating temp user profile.\nRunning script...\n\n", Color.WHITE);
 
                 try {
-                    ProcessBuilder user = new ProcessBuilder(
-                        "powershell.exe",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-File",
-                        "C:\\Program Files\\DualRun\\Scripts\\user.ps1"
-                    );
+                    StringBuilder out = new StringBuilder();
+                    int exitCode = runScript("C:\\Program Files\\DualRun\\Scripts\\user.ps1",out);
+                    if (exitCode == 0) {
 
-                user.redirectErrorStream(true);
-                Process process = user.start();
-
-                BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream())
-                );
-                StringBuilder out = new StringBuilder();
-
-                String line;
-
-                while ((line = reader.readLine()) != null) {
-                    out.append(line).append("\n");
-                }
-
-                int exitCode = process.waitFor();
-                if (exitCode == 0) {
-
-                    ProcessBuilder verify = new ProcessBuilder(
+                        ProcessBuilder verify = new ProcessBuilder(
                     "powershell.exe",
-                        "-Command",
-                        "Get-LocalUser -Name 'DualRun'"
-                    );
-                    verify.redirectErrorStream(true);
-                    Process verifyProc = verify.start();
-                    int verifyExit = verifyProc.waitFor();
+                            "-Command",
+                            "Get-LocalUser -Name 'DualRun'"
+                        );
+                        verify.redirectErrorStream(true);
+                        Process verifyProc = verify.start();
+                        int verifyExit = verifyProc.waitFor();
 
-                    if(verifyExit ==0){
-                        userCreated = true;
-                        username = "DualRun";
-                        SwingUtilities.invokeLater(() -> {
+                        if(verifyExit ==0){
+                            userCreated = true;
+                            SwingUtilities.invokeLater(() -> {
+                                selector.setEnabled(true);
+                            });
+
                             selector.setEnabled(true);
-                        });
+                            selector.revalidate();
+                            selector.repaint();
 
-                        selector.setEnabled(true);
-                        selector.revalidate();
-                        selector.repaint();
-
-                        Log(con, "User",Color.GREEN);
-                        Log(con, " "+username+" ",Color.WHITE);
-                        Log(con,"created successfully! \n", Color.GREEN);
-                        Log(con,"exit code: "+exitCode, Color.WHITE);
+                            Log(con, "User",Color.GREEN);
+                            Log(con, " "+username+" ",Color.WHITE);
+                            Log(con,"created successfully! \n", Color.GREEN);
+                            Log(con,"exit code: "+exitCode, Color.WHITE);
                         
-                    }else{
-                        userCreated=false;
-                        Log(con,"An error occured while verifying DualRun user creation.",Color.RED);
+                        }else{
+                            userCreated=false;
+                            Log(con,"An error occured while verifying DualRun user creation",Color.RED);
+                        }
+
+
+                        } else if (exitCode == 1) {
+                            userCreated = false;
+                            Log(con, "[CONFLICT]: ", Color.RED);
+                            Log(con, "User", Color.YELLOW);
+                            Log(con, " "+username+" ", Color.WHITE);
+                            Log(con,"already exists or validation failed. Try deleting user and running script again.\n", Color.YELLOW);
+                            Log(con,"exit code: "+exitCode, Color.WHITE);
+                        } else {
+                        userCreated = false;
+                            Log(con, "User creation unexpectedly failed.\n", Color.RED);
+                            Log(con, "exit code: "+exitCode, Color.WHITE);
+                        }
+
+                    } catch (Exception ex) {
+                        Log(con, "Failed to create user: " + ex.getMessage(), Color.RED);
                     }
-
-
-                } else if (exitCode == 1) {
-                    userCreated = false;
-                    Log(con, "[CONFLICT]: ", Color.RED);
-                    Log(con, "User", Color.YELLOW);
-                    Log(con, " "+username+" ", Color.WHITE);
-                    Log(con,"already exists or validation failed. Try deleting user and running script again.\n", Color.YELLOW);
-                    Log(con,"exit code: "+exitCode, Color.WHITE);
-                } else {
-                    userCreated = false;
-                    Log(con, "User creation failed.\n", Color.RED);
-                    Log(con, "exit code: "+exitCode, Color.WHITE);
-                }
-
-        } catch (Exception ex) {
-            Log(con, "Failed to create user: " + ex.getMessage(), Color.RED);
-        }
-    });
+            });
 
             JButton Inst = new JButton("2. Specify app before the install");
             Inst.setEnabled(false);
-            Inst.setBounds(bx, by+200, bw, bh);
+            Inst.setBounds(bx, (int)(by+1.5*space), bw, bh);
 
 
 
             
             selector.addActionListener(e->{
+                // App wraper safety-check
                 if(!userCreated){
                     Log(con, "Create user profile first.\n", Color.RED);
                     return;
                 }
-                    app = (String) selector.getSelectedItem();
-                    if(app.equals("-Select an app-")){
+                    String opt = (String) selector.getSelectedItem();
+                    if(opt == null || opt.equals("-Select an app-")){
+                        selectedApp = null;
+                        Inst.setEnabled(false);
                         return;
-                    }else{
-                        Inst.setText("2. Install " + app + " on '" + username+"' ");
-                        Inst.setEnabled(true);
-                        Log(con, "\nReady to install "+app+" on profile '"+username+"' ", Color.WHITE);
                     }
+                    selectedApp = opt;
+                    Inst.setEnabled(true);
+                    Inst.setText("2. Install " + opt + " on '" + username+"' ");
+                    Log(con, "\nReady to install "+opt+" on profile '"+username+"' ", Color.WHITE);
+                    
                 });
             
 
@@ -190,7 +199,7 @@ public static void Log(JTextPane con, String msg, Color color) {
             //Log(con, ""+app+" installed successfully on system user '"+username+"' ");
 
             JButton Fin = new JButton();
-            Fin.setBounds(bx, by+300, bw, bh);
+            Fin.setBounds(bx, (int)(by+2.25*space), bw, bh);
             if(appAndUserSuccess){
                 Fin.setText("3. Log off " + username + " & exit DualRun");
                 Fin.addActionListener(e->{
@@ -203,11 +212,82 @@ public static void Log(JTextPane con, String msg, Color color) {
                 Fin.addActionListener(e -> frame.dispose());
             }
 
+            delUsr.addActionListener(e -> {
+                try{
+                    StringBuilder out = new StringBuilder();
+                    int exitCode = runScript("C:\\Program Files\\DualRun\\Scripts\\delUser.ps1",out);
+                    if(exitCode ==0){
+                        userCreated = false;
+                        selector.setEnabled(false);
+                        selector.revalidate();
+                        selector.repaint();
+
+                        Log(con, "\nUser ", Color.GREEN);
+                        Log(con, username + " ", Color.WHITE);
+                        Log(con, "deleted successfully!\n", Color.GREEN);
+                    }else if(exitCode == 1){
+                        userCreated = false;
+                            selector.setEnabled(false);
+                            selector.revalidate();
+                            selector.repaint();
+
+                            Log(con, "User ", Color.RED);
+                            Log(con, username + " ", Color.WHITE);
+                            Log(con, "was not deleted successfully.\n", Color.RED);
+                            Log(con, "Full error:" + out, Color.WHITE);
+                    }else{
+                        Log(con, "[ERROR] Unexpected failure while deleting DualRun\n", Color.RED);
+                        Log(con, "Exit code: " + exitCode + "\n", Color.WHITE);
+                        Log(con, "Full error:" + out, Color.WHITE);
+
+                        userCreated = true;
+                        selector.setEnabled(false);
+                        selector.revalidate();
+                        selector.repaint();
+                    }
+                }catch(Exception ex){
+                    Log(con, "Failed to delete user DualRun: "+ex.getMessage(), Color.RED);
+                }
+            });
+             
+
+            Inst.addActionListener(e->{
+
+                Log(con, "Installing "+selectedApp+" on user DualRun...",Color.WHITE);
+                try{
+                StringBuilder out = new StringBuilder();
+                int exitCode;
+                if("Viber".equals(selectedApp)){
+                    exitCode = runScript("C:\\Program Files\\DualRun\\Scripts\\iViber.ps1",out);
+                }else if("Telegram".equals(selectedApp)){
+                    exitCode = runScript("C:\\Program Files\\DualRun\\Scripts\\iTelegram.ps1",out);
+                }else if("Discord".equals(selectedApp)){
+                    exitCode = runScript("C:\\Program Files\\DualRun\\Scripts\\iDiscord.ps1",out);
+                }else{
+                    Log(con, "[ERROR] Unknown app or unselected app to install", Color.RED);
+                    return;
+                }
+
+                if(exitCode == 0){
+                    Log(con, ""+selectedApp+" ",Color.WHITE);
+                    Log(con,"was installed successfully on user DualRun!",Color.GREEN);
+                }else{
+                    Log(con, ""+selectedApp+" ",Color.WHITE);
+                    Log(con,"failed to install", Color.RED);
+                    Log(con, "\n"+out.toString(),Color.WHITE);
+                }
+                }catch(Exception ex){
+                    Log(con,"Failed to install app "+selectedApp+" on user DualRun: " + ex.getMessage(),Color.RED);
+                }
+            });
+
+
             frame.add(scrollPane);
             frame.add(Usr);
             frame.add(selector);
             frame.add(Inst);
             frame.add(Fin);
+            frame.add(delUsr);
 
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setSize(w,h);
